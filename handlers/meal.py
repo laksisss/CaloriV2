@@ -16,6 +16,11 @@ MEAL_TYPES = {
     "snack": "🍎 Перекус"
 }
 
+def get_back_to_menu_button() -> InlineKeyboardMarkup:
+    """Кнопка возврата в главное меню"""
+    keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_stats")]]
+    return InlineKeyboardMarkup(keyboard)
+
 def split_food_items(text: str) -> list:
     items = [line.strip() for line in text.split('\n') if line.strip()]
     if len(items) == 1 and ',' in text:
@@ -110,13 +115,13 @@ async def meal_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if errors:
             response += "\n\nНе распознано:\n" + "\n".join(errors)
 
-        await query.edit_message_text(response, reply_markup=None)
+        await query.edit_message_text(response, reply_markup=get_back_to_menu_button())
         return ConversationHandler.END
 
 async def process_single_food(update, session, db_user, today, text):
     meal_data = find_in_local_db(text)
     if not meal_data:
-        msg = await update.message.reply_text(f"🤔 Ищу '{text}' через ИИ...")
+        msg = await update.message.reply_text(f" Ищу '{text}' через ИИ...")
         meal_data = await analyze_text_meal(text)
         if not meal_data:
             await msg.edit_text(f"❌ Не удалось распознать '{text}'")
@@ -136,6 +141,7 @@ async def process_single_food(update, session, db_user, today, text):
     await update.message.reply_text(
         f"✅ {meal_data['name']}\n"
         f"⚖️ {meal_data['weight']}г\n"
-        f"🔥 {meal_data['calories']} ккал\n"
-        f"🥩 Б: {meal_data['protein']}г | 🥑 Ж: {meal_data['fat']}г | 🍞 У: {meal_data['carbs']}г"
+        f" {meal_data['calories']} ккал\n"
+        f"🥩 Б: {meal_data['protein']}г | 🥑 Ж: {meal_data['fat']}г | 🍞 У: {meal_data['carbs']}г",
+        reply_markup=get_back_to_menu_button()
     )
