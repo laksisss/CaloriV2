@@ -30,30 +30,16 @@ async def menu_callback(update: Update, context):
     data = query.data
 
     if data == "stats":
-        from handlers.stats import stats_command
-        class FakeMsg:
-            async def reply_text(self, text, **kwargs):
-                await query.edit_message_text(text, **kwargs)
-        fake_update = type('U', (), {
-            'effective_user': query.from_user,
-            'message': FakeMsg()
-        })()
-        await stats_command(fake_update, context)
+        # Перенаправляем на stats_command с правильным update
+        await stats_command(update, context)
 
     elif data == "goal":
-        from handlers.profile import show_goal
+        # Перенаправляем на show_goal с правильным update
         await show_goal(update, context)
 
     elif data in ("menu", "menu_stats", "menu_main"):
-        from handlers.start import start_command
-        class FakeMsg:
-            async def reply_text(self, text, **kwargs):
-                await query.edit_message_text(text, **kwargs)
-        fake_update = type('U', (), {
-            'effective_user': query.from_user,
-            'message': FakeMsg()
-        })()
-        await start_command(fake_update, context)
+        # Перенаправляем на start_command с правильным update
+        await start_command(update, context)
 
     elif data.startswith("hist_"):
         await query.edit_message_text("📅 История за другие дни доступна в Mini App!")
@@ -95,14 +81,12 @@ async def main():
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
         states={SELECT_MEAL_TYPE: [CallbackQueryHandler(meal_type_callback)]},
         fallbacks=[CommandHandler("start", start_command)],
-        per_message=True,
     )
 
     photo_conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.PHOTO, handle_photo)],
         states={PHOTO_CONFIRM: [CallbackQueryHandler(photo_meal_type_callback)]},
         fallbacks=[],
-        per_message=True,
     )
 
     application.add_handler(CommandHandler("start", start_command))
