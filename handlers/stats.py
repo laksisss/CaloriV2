@@ -59,14 +59,15 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu")]]
 
-        # ИСПРАВЛЕНИЕ: правильная обработка callback query
-       if update.callback_query:
-    await update.callback_query.edit_message_text(
-        response, 
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-else:
-    await update.message.reply_text(
-        response, 
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                response,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                response,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
