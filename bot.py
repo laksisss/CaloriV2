@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import logging
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ConversationHandler, ContextTypes
 from config import TELEGRAM_TOKEN
 from database import init_db
@@ -9,6 +9,19 @@ from handlers.meal import handle_text, meal_type_callback, SELECT_MEAL_TYPE
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def get_main_menu_keyboard() -> InlineKeyboardMarkup:
+    """Главное меню с кнопками"""
+    keyboard = [
+        [
+            InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
+            InlineKeyboardButton("📅 История", callback_data="menu_history")
+        ],
+        [
+            InlineKeyboardButton("🎯 Цель", callback_data="menu_goal")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from database import async_session
@@ -29,12 +42,23 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"👋 Привет, {user.first_name}!\n\n"
             "Отправь мне:\n"
             "• Текст: `курица 200г, рис 150г`\n"
-            "• Несколько продуктов через запятую или с новой строки\n\n"
-            "Команды:\n"
-            "/stats - статистика за сегодня\n"
-            "/history - история по дням",
-            parse_mode="Markdown"
+            "• Несколько продуктов через запятую или с новой строки",
+            parse_mode="Markdown",
+            reply_markup=get_main_menu_keyboard()
         )
+
+async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка кнопок главного меню"""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "menu_stats":
+        from handlers.stats import stats_command
+        await stats_command(update, context)
+    elif query.data == "menu_history":
+        await query.edit_message_text(" История по дням - используй /history")
+    elif query.data == "menu_goal":
+        await query.edit_message_text(" Цель - используй /goal для настройки")
 
 async def error_handler(update: object, context) -> None:
     logger.error(f"Ошибка: {context.error}", exc_info=context.error)
@@ -57,6 +81,7 @@ async def main():
 
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CallbackQueryHandler(menu_callback, pattern="^menu_"))
     app.add_error_handler(error_handler)
 
     logger.info("Бот запущен!")
