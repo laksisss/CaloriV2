@@ -130,7 +130,7 @@ document.getElementById('nextDay').addEventListener('click', () => {
 });
 
 addMealBtn.addEventListener('click', () => {
-    tg.sendData(JSON.stringify({ action: 'add_meal' }));
+    // Закрываем Mini App, чтобы пользователь мог отправить еду боту
     tg.close();
 });
 
