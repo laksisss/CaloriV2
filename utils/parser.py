@@ -1,0 +1,34 @@
+import re
+
+FOOD_DB = {
+    "яйцо": {"calories": 157, "protein": 12.7, "fat": 10.9, "carbs": 0.7},
+    "куриная грудка": {"calories": 165, "protein": 31, "fat": 3.6, "carbs": 0},
+    "рис": {"calories": 130, "protein": 2.7, "fat": 0.3, "carbs": 28},
+    "гречка": {"calories": 110, "protein": 4.2, "fat": 1.1, "carbs": 21},
+}
+
+def parse_weight(text: str):
+    patterns = [
+        r'(\d+(?:[.,]\d+)?)\s*(?:г|грамм|гр)\b',
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return float(match.group(1).replace(',', '.'))
+    return None
+
+def find_in_local_db(text: str):
+    text_lower = text.lower()
+    for product, kbju in FOOD_DB.items():
+        if product in text_lower:
+            weight = parse_weight(text) or 100
+            multiplier = weight / 100
+            return {
+                "name": product,
+                "weight": weight,
+                "calories": round(kbju["calories"] * multiplier, 1),
+                "protein": round(kbju["protein"] * multiplier, 1),
+                "fat": round(kbju["fat"] * multiplier, 1),
+                "carbs": round(kbju["carbs"] * multiplier, 1),
+            }
+    return None
