@@ -1,9 +1,14 @@
 from groq import AsyncGroq
 import json
-from config import GROQ_API_KEY
+import logging
+import base64
+from config import GROQ_API_KEY, TELEGRAM_TOKEN
+
+logger = logging.getLogger(__name__)
 
 # Асинхронный клиент - не блокирует бота!
 client = AsyncGroq(api_key=GROQ_API_KEY)
+
 
 async def analyze_text_meal(text: str):
     """Анализ текста через Groq Llama 3.3 (бесплатно)"""
@@ -53,13 +58,10 @@ async def analyze_text_meal(text: str):
         print(f"Groq error: {e}")
     
     return None
-  async def analyze_photo_meal(photo_file_id: str) -> dict | None:
-    """
-    Анализирует фото еды через Grok Vision API.
-    Возвращает данные о блюде или None.
-    """
-    from groq import AsyncGroq
-    import base64
+
+
+async def analyze_photo_meal(photo_file_id: str) -> dict | None:
+    """Анализирует фото еды через Groq Vision API"""
     from telegram import Bot
     
     try:
@@ -70,8 +72,6 @@ async def analyze_text_meal(text: str):
         
         # Кодируем в base64
         photo_base64 = base64.b64encode(photo_bytes).decode('utf-8')
-        
-        client = AsyncGroq(api_key=GROQ_API_KEY)
         
         response = await client.chat.completions.create(
             model="llama-3.2-90b-vision-preview",
@@ -85,8 +85,8 @@ async def analyze_text_meal(text: str):
                                 "Проанализируй фото еды. Определи:\n"
                                 "1. Название блюда\n"
                                 "2. Примерный вес в граммах\n"
-                                "3. Калории на 100г\n"
-                                "4. БЖУ на 100г (белки, жиры, углеводы)\n\n"
+                                "3. Калории\n"
+                                "4. БЖУ (белки, жиры, углеводы)\n\n"
                                 "Отвечай ТОЛЬКО в формате JSON:\n"
                                 '{"name": "блюдо", "weight": 200, "calories": 150, "protein": 12, "fat": 5, "carbs": 18}'
                             )
@@ -104,7 +104,6 @@ async def analyze_text_meal(text: str):
             temperature=0.3
         )
         
-        import json
         result = response.choices[0].message.content.strip()
         
         # Извлекаем JSON из ответа
