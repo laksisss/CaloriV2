@@ -11,13 +11,14 @@ from config import FREE_DAILY_LIMIT
 SELECT_MEAL_TYPE = 1
 
 MEAL_TYPES = {
-    "breakfast": " Завтрак",
+    "breakfast": "🌅 Завтрак",
     "lunch": "🍽 Обед",
     "dinner": "🌙 Ужин",
     "snack": "🍎 Перекус"
 }
 
 def split_food_items(text: str) -> list:
+    """Разбиваем текст на отдельные продукты"""
     items = [line.strip() for line in text.split('\n') if line.strip()]
     if len(items) == 1 and ',' in text:
         items = [item.strip() for item in text.split(',') if item.strip()]
@@ -46,9 +47,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         food_items = split_food_items(text)
         
         if len(food_items) > 1:
+            # ⭐ КЛЮЧЕВОЕ ИСПРАВЛЕНИЕ: сохраняем в context.user_data, НЕ в callback_data!
             context.user_data['pending_food'] = text
             context.user_data['food_count'] = len(food_items)
             
+            # ⭐ Короткие callback_data (меньше 64 байт)
             keyboard = [
                 [InlineKeyboardButton(v, callback_data=f"m_{k}")]
                 for k, v in MEAL_TYPES.items()
@@ -61,14 +64,18 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return SELECT_MEAL_TYPE
         
+        # Один продукт — обрабатываем сразу
         await process_single_food(update, session, db_user, today, food_items[0])
         return ConversationHandler.END
 
 async def meal_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка выбора типа приема пищи"""
     query = update.callback_query
     await query.answer()
     
-    meal_type = query.data[2:]
+    # callback_data = "m_breakfast" → type = "breakfast"
+    meal_type = query.data[2:]  # убираем префикс "m_"
+    
     text = context.user_data.get('pending_food', '')
     if not text:
         await query.edit_message_text("❌ Данные устарели. Напиши продукты заново.")
@@ -110,10 +117,11 @@ async def meal_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
         db_user.daily_requests += food_count
         await session.commit()
     
+    # Очищаем context
     context.user_data.pop('pending_food', None)
     context.user_data.pop('food_count', None)
     
-    response = f" Добавлено в {MEAL_TYPES[meal_type]}:\n\n"
+    response = f"📊 Добавлено в {MEAL_TYPES[meal_type]}:\n\n"
     if results:
         response += "\n".join(results)
         response += f"\n\n🔥 Всего: {total_calories} ккал"
@@ -124,7 +132,9 @@ async def meal_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     return ConversationHandler.END
 
 async def process_single_food(update, session, db_user, today, text):
+    """Обработка одного продукта"""
     meal_data = find_in_local_db(text)
+    
     if not meal_data:
         msg = await update.message.reply_text(f"🤔 Ищу '{text}' через ИИ...")
         meal_data = await analyze_text_meal(text)
@@ -145,7 +155,7 @@ async def process_single_food(update, session, db_user, today, text):
     
     await update.message.reply_text(
         f"✅ {meal_data['name']}\n"
-        f"️ {meal_data['weight']}г\n"
+        f"⚖️ {meal_data['weight']}г\n"
         f"🔥 {meal_data['calories']} ккал\n"
         f"🥩 Б: {meal_data['protein']}г | 🥑 Ж: {meal_data['fat']}г | 🍞 У: {meal_data['carbs']}г"
     )
