@@ -1,77 +1,83 @@
-from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
+from datetime import datetime, timedelta
 from database import async_session
 from models import User, Meal, Goal
 
+
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    
+
     async with async_session() as session:
-        result = await session.execute(select(User).where(User.telegram_id == user.id))
+        result = await session.execute(
+            select(User).where(User.telegram_id == user.id)
+        )
         db_user = result.scalar_one_or_none()
+        
         if not db_user:
-            await update.message.reply_text("❌ Сначала нажми /start")
+            response = "❌ Пользователь не найден. Отправь /start"
+            # Универсальная отправка
+            if update.callback_query:
+                await update.callback_query.edit_message_text(response)
+            else:
+                await update.message.reply_text(response)
             return
-        
-        result = await session.execute(select(Goal).where(Goal.user_id == db_user.id))
-        goal = result.scalar_one_or_none()
-        
+
+        # Статистика за сегодня
         today = datetime.now().strftime("%Y-%m-%d")
-        
         result = await session.execute(
             select(
                 func.sum(Meal.calories),
                 func.sum(Meal.protein),
                 func.sum(Meal.fat),
-                func.sum(Meal.carbs)
-            ).where(
-                and_(Meal.user_id == db_user.id, Meal.date == today)
-            )
+                func.sum(Meal.carbs),
+            ).where((Meal.user_id == db_user.id) & (Meal.date == today))
         )
-        total = result.first()
-        
-        calories = total[0] or 0
-        protein = total[1] or 0
-        fat = total[2] or 0
-        carbs = total[3] or 0
-        
-        goal_calories = goal.calories if goal else 2000
-        goal_protein = goal.protein if goal else 100
-        goal_fat = goal.fat if goal else 70
-        goal_carbs = goal.carbs if goal else 250
-        
-        cal_percent = round((calories / goal_calories) * 100) if goal_calories else 0
-        
-        response = (
-            f"📊 Статистика за {today}\n\n"
-            f"🔥 {calories} / {goal_calories} ккал ({cal_percent}%)\n"
-            f"{'█' * (cal_percent // 5)}{'░' * (20 - cal_percent // 5)}\n\n"
-            f"🥩 Белки: {protein}/{goal_protein}г\n"
-            f" Жиры: {fat}/{goal_fat}г\n"
-            f"🍞 Углеводы: {carbs}/{goal_carbs}г\n\n"
-            f"─────────────────\n"
-            f"📅 По приемам пищи:\n"
-        )
-        
+        today_stats = result.first()
+
+        # Цель
         result = await session.execute(
-            select(Meal.meal_type, func.sum(Meal.calories))
-            .where(and_(Meal.user_id == db_user.id, Meal.date == today))
-            .group_by(Meal.meal_type)
+            select(Goal).where(Goal.user_id == db_user.id)
         )
-        meal_stats = result.all()
+        goal = result.scalar_one_or_none()
+
+        # Формируем ответ
+        calories = today_stats[0] or 0
+        protein = today_stats[1] or 0
+        fat = today_stats[2] or 0
+        carbs = today_stats[3] or 0
+
+        response = (
+            f"📊 *Статистика за сегодня*\n\n"
+            f"🔥 Калории: {calories} ккал"
+        )
         
-        meal_types = {"breakfast": " Завтрак", "lunch": " Обед", "dinner": " Ужин", "snack": "🍎 Перекус"}
-        for meal_type, meal_calories in meal_stats:
-            if meal_type in meal_types:
-                response += f"{meal_types[meal_type]}: {meal_calories} ккал\n"
-        
+        if goal:
+            response += f" / {goal.calories}\n"
+            response += f"🥩 Белки: {protein}г / {goal.protein}г\n"
+            response += f"🥑 Жиры: {fat}г / {goal.fat}г\n"
+            f"🍞 Углеводы: {carbs}г / {goal.carbs}г\n"
+        else:
+            response += "\n"
+            response += f"🥩 Белки: {protein}г\n"
+            response += f"🥑 Жиры: {fat}г\n"
+            response += f"🍞 Углеводы: {carbs}г\n"
+
         keyboard = [
-            [
-                InlineKeyboardButton("📅 Вчера", callback_data="hist_1"),
-                InlineKeyboardButton("🏠 Меню", callback_data="menu_stats")
-            ]
+            [InlineKeyboardButton("🏠 Главное меню", callback_data="menu")],
         ]
-        
-        await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
+
+        # Универсальная отправка - работает и для callback, и для обычного сообщения
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                response,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                response,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode="Markdown"
+            )
