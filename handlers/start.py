@@ -22,7 +22,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             session.add(Goal(user_id=user.id))
             await session.commit()
 
-    app_url = os.getenv("APP_URL", "https://your-app.up.railway.app")
+    app_url = os.getenv("APP_URL", "https://caloriv2-production.up.railway.app")
 
     keyboard = [
         [InlineKeyboardButton(
@@ -46,6 +46,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👇 Нажми кнопку ниже, чтобы открыть дашборд"
     )
 
+    # Проверяем, это callback query или обычное сообщение
     if update.callback_query:
         await update.callback_query.edit_message_text(
             text,
