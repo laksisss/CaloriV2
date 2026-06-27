@@ -42,11 +42,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• Текст: `курица 200г, рис 150г`\n"
         "• Фото блюда 📸\n"
         "• Несколько продуктов через запятую\n\n"
-        "🆓 10 запросов/день бесплатно\n\n"
         "👇 Нажми кнопку ниже, чтобы открыть дашборд"
     )
 
-    # Проверяем, это callback query или обычное сообщение
     if update.callback_query:
         await update.callback_query.edit_message_text(
             text,
