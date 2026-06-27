@@ -53,7 +53,7 @@ async def analyze_text_meal(text: str):
         print(f"Groq error: {e}")
     
     return None
-    async def analyze_photo_meal(photo_file_id: str) -> dict | None:
+  async def analyze_photo_meal(photo_file_id: str) -> dict | None:
     """
     Анализирует фото еды через Grok Vision API.
     Возвращает данные о блюде или None.
