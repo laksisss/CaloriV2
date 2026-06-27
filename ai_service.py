@@ -73,7 +73,7 @@ async def analyze_photo_meal(photo_file_id: str) -> dict | None:
 
         client = _get_client()
         response = await client.chat.completions.create(
-            model="llama-3.2-90b-vision-preview",
+            model="llama-3.2-11b-vision-preview",
             messages=[
                 {
                     "role": "user",
