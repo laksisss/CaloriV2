@@ -1,128 +1,111 @@
+import os
 from groq import AsyncGroq
-import json
-import logging
-import base64
-from config import GROQ_API_KEY, TELEGRAM_TOKEN
+from dotenv import load_dotenv
 
-logger = logging.getLogger(__name__)
+load_dotenv()
 
-# Асинхронный клиент - не блокирует бота!
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
 client = AsyncGroq(api_key=GROQ_API_KEY)
 
-
-async def analyze_text_meal(text: str):
-    """Анализ текста через Groq Llama 3.3 (бесплатно)"""
-    prompt = f"""Ты эксперт по питанию. Проанализируй описание еды и верни ТОЛЬКО JSON без пояснений.
-
-Описание: {text}
-
-Верни JSON в формате:
-{{"name": "название блюда", "weight": 100, "calories": 250, "protein": 15, "fat": 8, "carbs": 30}}
-
-Если несколько продуктов - верни массив объектов."""
-    
+async def analyze_text_meal(text: str) -> dict | None:
+    """
+    Анализирует текст и определяет тип приема пищи
+    """
     try:
-        response = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+        completion = await client.chat.completions.create(
+            model="llama-3.1-70b-versatile",
             messages=[
-                {"role": "system", "content": "Отвечай только валидным JSON без markdown."},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": """Ты эксперт по питанию. Определи тип приема пищи по описанию.
+Возможные типы:
+- breakfast (завтрак)
+- lunch (обед) 
+- dinner (ужин)
+- snack (перекус)
+
+Отвечай ТОЛЬКО названием типа на английском языке, без дополнительных объяснений."""
+                },
+                {
+                    "role": "user",
+                    "content": f"Определи тип приема пищи: {text}"
+                }
             ],
             temperature=0.3,
-            max_tokens=500
+            max_tokens=50
         )
         
-        text_response = response.choices[0].message.content.strip()
+        meal_type = completion.choices[0].message.content.strip().lower()
         
-        # Убираем markdown обёртки если есть
-        if text_response.startswith("```"):
-            text_response = text_response.split("```")[1]
-            if text_response.startswith("json"):
-                text_response = text_response[4:]
-            text_response = text_response.strip()
-        
-        # Извлекаем JSON
-        if '[' in text_response:
-            start = text_response.find('[')
-            end = text_response.rfind(']') + 1
+        # Проверяем, что вернули правильный тип
+        valid_types = ['breakfast', 'lunch', 'dinner', 'snack']
+        if meal_type in valid_types:
+            return {"type": meal_type, "description": text}
         else:
-            start = text_response.find('{')
-            end = text_response.rfind('}') + 1
-        
-        if start != -1 and end != 0:
-            data = json.loads(text_response[start:end])
-            if isinstance(data, list):
-                return data[0] if data else None
-            return data
+            # Пытаемся найти тип в ответе
+            for valid_type in valid_types:
+                if valid_type in meal_type:
+                    return {"type": valid_type, "description": text}
+            return None
+            
     except Exception as e:
-        print(f"Groq error: {e}")
-    
-    return None
+        print(f"Error analyzing text: {e}")
+        return None
 
 
 async def analyze_photo_meal(photo_file_id: str) -> dict | None:
-    """Анализирует фото еды через Groq Vision API"""
-    from telegram import Bot
-    
+    """
+    Анализирует фото еды и определяет тип приема пищи
+    """
     try:
-        # Скачиваем фото
-        bot = Bot(token=TELEGRAM_TOKEN)
-        file = await bot.get_file(photo_file_id)
-        photo_bytes = await file.download_as_bytearray()
-        
-        # Кодируем в base64
-        photo_base64 = base64.b64encode(photo_bytes).decode('utf-8')
-        
-        response = await client.chat.completions.create(
+        completion = await client.chat.completions.create(
             model="llama-3.2-90b-vision-preview",
             messages=[
+                {
+                    "role": "system",
+                    "content": """Ты эксперт по питанию. Определи тип приема пищи по фотографии.
+Возможные типы:
+- breakfast (завтрак)
+- lunch (обед)
+- dinner (ужин)
+- snack (перекус)
+
+Отвечай ТОЛЬКО названием типа на английском языке, без дополнительных объяснений."""
+                },
                 {
                     "role": "user",
                     "content": [
                         {
                             "type": "text",
-                            "text": (
-                                "Проанализируй фото еды. Определи:\n"
-                                "1. Название блюда\n"
-                                "2. Примерный вес в граммах\n"
-                                "3. Калории\n"
-                                "4. БЖУ (белки, жиры, углеводы)\n\n"
-                                "Отвечай ТОЛЬКО в формате JSON:\n"
-                                '{"name": "блюдо", "weight": 200, "calories": 150, "protein": 12, "fat": 5, "carbs": 18}'
-                            )
+                            "text": "Определи тип этого приема пищи"
                         },
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": f"data:image/jpeg;base64,{photo_base64}"
+                                "url": f"https://api.telegram.org/file/bot{os.getenv('BOT_TOKEN')}/{photo_file_id}"
                             }
                         }
                     ]
                 }
             ],
-            max_tokens=500,
-            temperature=0.3
+            temperature=0.3,
+            max_tokens=50
         )
         
-        result = response.choices[0].message.content.strip()
+        meal_type = completion.choices[0].message.content.strip().lower()
         
-        # Извлекаем JSON из ответа
-        if "```json" in result:
-            result = result.split("```json")[1].split("```")[0].strip()
-        elif "```" in result:
-            result = result.split("```")[1].split("```")[0].strip()
-        
-        data = json.loads(result)
-        
-        return {
-            "name": data.get("name", "Блюдо"),
-            "weight": data.get("weight", 100),
-            "calories": data.get("calories", 0),
-            "protein": data.get("protein", 0),
-            "fat": data.get("fat", 0),
-            "carbs": data.get("carbs", 0)
-        }
-        
+        # Проверяем, что вернули правильный тип
+        valid_types = ['breakfast', 'lunch', 'dinner', 'snack']
+        if meal_type in valid_types:
+            return {"type": meal_type, "description": "Photo analysis"}
+        else:
+            # Пытаемся найти тип в ответе
+            for valid_type in valid_types:
+                if valid_type in meal_type:
+                    return {"type": valid_type, "description": "Photo analysis"}
+            return None
+            
     except Exception as e:
-        logger.error(f"Ошибка анализа фото: {e}")
+        print(f"Error analyzing photo: {e}")
         return None
