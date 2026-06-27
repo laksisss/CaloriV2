@@ -59,7 +59,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu")]]
 
-        # ИСПРАВЛЕНИЕ: правильная обработка callback query
+        # ИСПРАВЛЕНИЕ: проверяем тип обновления
         if update.callback_query:
             await update.callback_query.edit_message_text(
                 response,
