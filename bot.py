@@ -131,4 +131,136 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             meals = (await session.execute(
                 select(Meal.name, Meal.meal_type, Meal.calories)
                 .where(and_(Meal.user_id == db_user.id, Meal.date == date))
-               
+                .order_by(Meal.meal_type)
+            )).all()
+
+            if meals:
+                grouped = {}
+                total_cal = 0
+                for name, mt, cal in meals:
+                    grouped.setdefault(mt, []).append(name)
+                    total_cal += cal
+                emojis = {"breakfast": "🍳", "lunch": "🍽", "dinner": "🌙", "snack": "🍎"}
+                response += f"📆 {date} ({total_cal} ккал)\n"
+                for mt, items in grouped.items():
+                    response += f"  {emojis.get(mt, '•')} {', '.join(items)}\n\n"
+            else:
+                response += f"⚪ {date}: нет данных\n\n"
+
+        await send_reply(update, response, [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]])
+
+
+async def goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    async with async_session() as session:
+        db_user = (await session.execute(select(User).where(User.telegram_id == user.id))).scalar_one_or_none()
+        if not db_user:
+            await send_reply(update, "❌ Сначала нажми /start")
+            return
+
+        goal = (await session.execute(select(Goal).where(Goal.user_id == db_user.id))).scalar_one_or_none()
+        if not goal:
+            goal = Goal(user_id=db_user.id)
+            session.add(goal)
+            await session.commit()
+
+        response = (
+            "🎯 Ваши цели:\n\n"
+            f"🔥 Калории: {goal.calories} ккал\n"
+            f"🥩 Белки: {goal.protein}г\n"
+            f"🥑 Жиры: {goal.fat}г\n"
+            f"🍞 Углеводы: {goal.carbs}г\n\n"
+            "Изменить: `/setgoal 2000 100 70 250`"
+        )
+        await send_reply(update, response, [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]])
+
+
+async def set_goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    try:
+        calories, protein, fat, carbs = map(int, context.args)
+    except (ValueError, IndexError, TypeError):
+        await send_reply(update, "❌ Формат: /setgoal 2000 100 70 250")
+        return
+
+    async with async_session() as session:
+        db_user = (await session.execute(select(User).where(User.telegram_id == user.id))).scalar_one_or_none()
+        if not db_user:
+            await send_reply(update, "❌ Сначала нажми /start")
+            return
+        goal = (await session.execute(select(Goal).where(Goal.user_id == db_user.id))).scalar_one_or_none()
+        if not goal:
+            goal = Goal(user_id=db_user.id)
+            session.add(goal)
+        goal.calories, goal.protein, goal.fat, goal.carbs = calories, protein, fat, carbs
+        await session.commit()
+
+    await send_reply(
+        update,
+        f"✅ Цели установлены:\n🔥 {calories} ккал\n🥩 {protein}г\n🥑 {fat}г\n🍞 {carbs}г",
+        [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]],
+    )
+
+
+async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == "menu_stats":
+        await stats_command(update, context)
+    elif query.data == "menu_history":
+        await history_command(update, context)
+    elif query.data == "menu_goal":
+        await goal_command(update, context)
+    elif query.data == "menu_main":
+        user = query.from_user
+        async with async_session() as session:
+            db_user = (await session.execute(select(User).where(User.telegram_id == user.id))).scalar_one_or_none()
+            name = db_user.first_name if db_user else "друг"
+            await query.edit_message_text(
+                f"👋 Привет, {name}!\n\nОтправь текст или фото блюда, или выбери раздел:",
+                reply_markup=get_main_menu_keyboard(),
+            )
+
+
+async def error_handler(update: object, context) -> None:
+    logger.error(f"Ошибка: {context.error}", exc_info=context.error)
+
+
+async def main():
+    await init_db()
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
+
+    photo_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.PHOTO, handle_photo)],
+        states={PHOTO_CONFIRM: [CallbackQueryHandler(photo_meal_type_callback, pattern="^pm_")]},
+        fallbacks=[],
+    )
+
+    text_handler = ConversationHandler(
+        entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
+        states={SELECT_MEAL_TYPE: [CallbackQueryHandler(meal_type_callback, pattern="^m_")]},
+        fallbacks=[],
+    )
+
+    app.add_handler(photo_handler)
+    app.add_handler(text_handler)
+    app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler("stats", stats_command))
+    app.add_handler(CommandHandler("history", history_command))
+    app.add_handler(CommandHandler("goal", goal_command))
+    app.add_handler(CommandHandler("setgoal", set_goal_command))
+    app.add_handler(CallbackQueryHandler(menu_callback, pattern="^menu_"))
+    app.add_error_handler(error_handler)
+
+    logger.info("Бот запущен!")
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+    await asyncio.Event().wait()
+
+
+if __name__ == "__main__":
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(main())
