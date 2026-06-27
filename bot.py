@@ -2,8 +2,7 @@ import asyncio
 import sys
 import os
 import logging
-import subprocess
-subprocess.run(["python", "check_static.py"])
+import json
 
 import uvicorn
 from telegram.ext import (
@@ -53,6 +52,23 @@ async def menu_callback(update: Update, context):
         await photo_meal_type_callback(update, context)
 
 
+async def handle_web_app_data(update: Update, context):
+    """Обработка данных от Mini App"""
+    web_app_data = update.effective_message.web_app_data
+    if web_app_data:
+        try:
+            data = json.loads(web_app_data.data)
+            if data.get('action') == 'add_meal':
+                # Отправляем пользователя обратно к добавлению еды
+                await update.effective_message.reply_text(
+                    "📝 Отправьте мне что вы съели!\n\n"
+                    "Пример: `курица 200г, рис 150г`",
+                    parse_mode="Markdown"
+                )
+        except json.JSONDecodeError:
+            pass
+
+
 async def error_handler(update: object, context) -> None:
     logger.error(f"Ошибка: {context.error}", exc_info=context.error)
 
@@ -95,6 +111,11 @@ async def main():
     application.add_handler(CommandHandler("goal", set_goal))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CallbackQueryHandler(menu_callback))
+    
+    # Обработчик данных от Mini App
+    web_app_handler = MessageHandler(filters.StatusUpdate.WEB_APP_DATA, handle_web_app_data)
+    application.add_handler(web_app_handler)
+    
     application.add_handler(conv_handler)
     application.add_handler(photo_conv_handler)
     application.add_error_handler(error_handler)
