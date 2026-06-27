@@ -1,7 +1,7 @@
 import asyncio
 import sys
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ConversationHandler, ContextTypes
 from sqlalchemy import select, func, and_
@@ -14,7 +14,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
-    """Главное меню с кнопками"""
     keyboard = [
         [
             InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
@@ -46,15 +45,18 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_main_menu_keyboard()
         )
 
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает статистику за сегодня"""
+async def send_stats_message(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
+    """Отправка статистики (работает и для команд, и для кнопок)"""
     user = update.effective_user
     
     async with async_session() as session:
         result = await session.execute(select(User).where(User.telegram_id == user.id))
         db_user = result.scalar_one_or_none()
         if not db_user:
-            await update.message.reply_text("❌ Сначала нажми /start")
+            if query:
+                await query.edit_message_text("❌ Сначала нажми /start")
+            else:
+                await update.message.reply_text("❌ Сначала нажми /start")
             return
         
         result = await session.execute(select(Goal).where(Goal.user_id == db_user.id))
@@ -104,20 +106,26 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 response += f"{meal_types[meal_type]}: {meal_calories} ккал\n"
         
         keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]]
-        await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        if query:
+            await query.edit_message_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает историю за последние 7 дней"""
+async def send_history_message(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
+    """Отправка истории (работает и для команд, и для кнопок)"""
     user = update.effective_user
     
     async with async_session() as session:
         result = await session.execute(select(User).where(User.telegram_id == user.id))
         db_user = result.scalar_one_or_none()
         if not db_user:
-            await update.message.reply_text("❌ Сначала нажми /start")
+            if query:
+                await query.edit_message_text("❌ Сначала нажми /start")
+            else:
+                await update.message.reply_text("❌ Сначала нажми /start")
             return
         
-        from datetime import timedelta
         today = datetime.now().date()
         
         response = "📅 История за последние 7 дней:\n\n"
@@ -133,17 +141,24 @@ async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response += f"{emoji} {date}: {total} ккал\n"
         
         keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]]
-        await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        if query:
+            await query.edit_message_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает и позволяет изменить цели"""
+async def send_goal_message(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
+    """Отправка информации о целях (работает и для команд, и для кнопок)"""
     user = update.effective_user
     
     async with async_session() as session:
         result = await session.execute(select(User).where(User.telegram_id == user.id))
         db_user = result.scalar_one_or_none()
         if not db_user:
-            await update.message.reply_text("❌ Сначала нажми /start")
+            if query:
+                await query.edit_message_text("❌ Сначала нажми /start")
+            else:
+                await update.message.reply_text("❌ Сначала нажми /start")
             return
         
         result = await session.execute(select(Goal).where(Goal.user_id == db_user.id))
@@ -166,10 +181,22 @@ async def goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]]
-        await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
+        
+        if query:
+            await query.edit_message_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
+        else:
+            await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_stats_message(update, context)
+
+async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_history_message(update, context)
+
+async def goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await send_goal_message(update, context)
 
 async def set_goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Устанавливает новые цели"""
     user = update.effective_user
     
     try:
@@ -207,16 +234,15 @@ async def set_goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Формат: /setgoal 2000 100 70 250")
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка кнопок главного меню"""
     query = update.callback_query
     await query.answer()
     
     if query.data == "menu_stats":
-        await stats_command(update, context)
+        await send_stats_message(update, context, query)
     elif query.data == "menu_history":
-        await history_command(update, context)
+        await send_history_message(update, context, query)
     elif query.data == "menu_goal":
-        await goal_command(update, context)
+        await send_goal_message(update, context, query)
     elif query.data == "menu_main":
         user = query.from_user
         async with async_session() as session:
