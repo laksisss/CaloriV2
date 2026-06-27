@@ -46,7 +46,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
-    """Показывает статистику (работает и для команд, и для кнопок)"""
     user = update.effective_user
     
     async with async_session() as session:
@@ -113,7 +112,6 @@ async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE, query=N
             await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
-    """Показывает историю (работает и для команд, и для кнопок)"""
     user = update.effective_user
     
     async with async_session() as session:
@@ -132,13 +130,38 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE, query
         
         for i in range(6, -1, -1):
             date = (today - timedelta(days=i)).strftime("%Y-%m-%d")
+            
+            # Получаем все приемы пищи за день
             result = await session.execute(
-                select(func.sum(Meal.calories))
+                select(Meal.name, Meal.meal_type, Meal.calories)
                 .where(and_(Meal.user_id == db_user.id, Meal.date == date))
+                .order_by(Meal.meal_type)
             )
-            total = result.scalar() or 0
-            emoji = "✅" if total > 0 else "⚪"
-            response += f"{emoji} {date}: {total} ккал\n"
+            meals = result.all()
+            
+            if meals:
+                # Группируем по типам приемов пищи
+                meal_types = {"breakfast": "🍳", "lunch": "🍽", "dinner": "🌙", "snack": "🍎"}
+                grouped = {}
+                total_cal = 0
+                
+                for name, meal_type, calories in meals:
+                    if meal_type not in grouped:
+                        grouped[meal_type] = []
+                    grouped[meal_type].append((name, calories))
+                    total_cal += calories
+                
+                # Формируем строку с датами и едой
+                date_str = f"{date} ({total_cal} ккал)\n"
+                
+                for mtype, items in grouped.items():
+                    emoji = meal_types.get(mtype, "•")
+                    items_str = ", ".join([name for name, _ in items])
+                    date_str += f"  {emoji} {items_str}\n"
+                
+                response += date_str + "\n"
+            else:
+                response += f"⚪ {date}: нет данных\n\n"
         
         keyboard = [[InlineKeyboardButton("🏠 Главное меню", callback_data="menu_main")]]
         
@@ -148,7 +171,6 @@ async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE, query
             await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def show_goal(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
-    """Показывает цели (работает и для команд, и для кнопок)"""
     user = update.effective_user
     
     async with async_session() as session:
@@ -234,7 +256,6 @@ async def set_goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Формат: /setgoal 2000 100 70 250")
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка кнопок главного меню"""
     query = update.callback_query
     await query.answer()
     
