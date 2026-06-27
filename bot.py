@@ -2,6 +2,8 @@ import asyncio
 import sys
 import os
 import logging
+import subprocess
+subprocess.run(["python", "check_static.py"])
 
 import uvicorn
 from telegram.ext import (
