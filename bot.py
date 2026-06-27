@@ -69,9 +69,18 @@ async def error_handler(update: object, context) -> None:
     logger.error(f"Ошибка: {context.error}", exc_info=context.error)
 
 
+async def run_bot(application):
+    """Запуск бота в фоне"""
+    logger.info("✅ Бот запущен!")
+    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+    # Держим бота активным
+    while True:
+        await asyncio.sleep(1)
+
+
 async def run_fastapi():
     """Запуск FastAPI сервера"""
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("PORT", 8080))
     config = uvicorn.Config(fastapi_app, host="0.0.0.0", port=port, log_level="info")
     server = uvicorn.Server(config)
     await server.serve()
@@ -86,12 +95,14 @@ async def main():
         entry_points=[MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text)],
         states={SELECT_MEAL_TYPE: [CallbackQueryHandler(meal_type_callback)]},
         fallbacks=[CommandHandler("start", start_command)],
+        per_message=True,
     )
 
     photo_conv_handler = ConversationHandler(
         entry_points=[MessageHandler(filters.PHOTO, handle_photo)],
         states={PHOTO_CONFIRM: [CallbackQueryHandler(photo_meal_type_callback)]},
         fallbacks=[],
+        per_message=True,
     )
 
     application.add_handler(CommandHandler("start", start_command))
@@ -102,20 +113,29 @@ async def main():
     application.add_handler(photo_conv_handler)
     application.add_error_handler(error_handler)
 
-    logger.info("Бот и Mini App запускаются...")
+    logger.info("🚀 Запуск бота и Mini App...")
 
     await application.initialize()
     await application.start()
-    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
 
-    logger.info("✅ Бот запущен! FastAPI слушает порт...")
+    # Запускаем бота и FastAPI параллельно
+    bot_task = asyncio.create_task(run_bot(application))
+    fastapi_task = asyncio.create_task(run_fastapi())
 
-    try:
-        await run_fastapi()
-    finally:
-        await application.updater.stop()
-        await application.stop()
-        await application.shutdown()
+    # Ждём завершения любой из задач (если одна упадёт — увидим ошибку)
+    done, pending = await asyncio.wait(
+        [bot_task, fastapi_task],
+        return_when=asyncio.FIRST_COMPLETED
+    )
+
+    # Отменяем оставшиеся задачи
+    for task in pending:
+        task.cancel()
+
+    # Корректное завершение
+    await application.updater.stop()
+    await application.stop()
+    await application.shutdown()
 
 
 if __name__ == "__main__":
