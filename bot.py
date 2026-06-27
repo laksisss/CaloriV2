@@ -1,12 +1,11 @@
 import asyncio
 import sys
 import logging
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ConversationHandler
 from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ConversationHandler, ContextTypes
 from config import TELEGRAM_TOKEN
 from database import init_db
 from handlers.meal import handle_text, meal_type_callback, SELECT_MEAL_TYPE
-from handlers.stats import stats_command, history_callback, back_to_today_callback, VIEW_HISTORY
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -58,9 +57,6 @@ async def main():
 
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("start", start_command))
-    app.add_handler(CommandHandler("stats", stats_command))
-    app.add_handler(CallbackQueryHandler(history_callback, pattern="^hist_"))
-    app.add_handler(CallbackQueryHandler(back_to_today_callback, pattern="^hist_today$"))
     app.add_error_handler(error_handler)
 
     logger.info("Бот запущен!")
