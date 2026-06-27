@@ -45,8 +45,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_main_menu_keyboard()
         )
 
-async def send_stats_message(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
-    """Отправка статистики (работает и для команд, и для кнопок)"""
+async def show_stats(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
+    """Показывает статистику (работает и для команд, и для кнопок)"""
     user = update.effective_user
     
     async with async_session() as session:
@@ -112,8 +112,8 @@ async def send_stats_message(update: Update, context: ContextTypes.DEFAULT_TYPE,
         else:
             await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def send_history_message(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
-    """Отправка истории (работает и для команд, и для кнопок)"""
+async def show_history(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
+    """Показывает историю (работает и для команд, и для кнопок)"""
     user = update.effective_user
     
     async with async_session() as session:
@@ -147,8 +147,8 @@ async def send_history_message(update: Update, context: ContextTypes.DEFAULT_TYP
         else:
             await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
 
-async def send_goal_message(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
-    """Отправка информации о целях (работает и для команд, и для кнопок)"""
+async def show_goal(update: Update, context: ContextTypes.DEFAULT_TYPE, query=None):
+    """Показывает цели (работает и для команд, и для кнопок)"""
     user = update.effective_user
     
     async with async_session() as session:
@@ -188,13 +188,13 @@ async def send_goal_message(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             await update.message.reply_text(response, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await send_stats_message(update, context)
+    await show_stats(update, context)
 
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await send_history_message(update, context)
+    await show_history(update, context)
 
 async def goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await send_goal_message(update, context)
+    await show_goal(update, context)
 
 async def set_goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -234,15 +234,16 @@ async def set_goal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Формат: /setgoal 2000 100 70 250")
 
 async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработка кнопок главного меню"""
     query = update.callback_query
     await query.answer()
     
     if query.data == "menu_stats":
-        await send_stats_message(update, context, query)
+        await show_stats(update, context, query)
     elif query.data == "menu_history":
-        await send_history_message(update, context, query)
+        await show_history(update, context, query)
     elif query.data == "menu_goal":
-        await send_goal_message(update, context, query)
+        await show_goal(update, context, query)
     elif query.data == "menu_main":
         user = query.from_user
         async with async_session() as session:
